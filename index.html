@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Câmera Acessível</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="camera-wrapper">
+    <video id="video" autoplay playsinline></video>
+
+    <!-- Barra superior -->
+    <div class="top-bar">
+      <!-- Ícone do flash -->
+      <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        <path d="M7 2v10h3v10l7-12h-4l4-8z"/>
+      </svg>
+
+      <!-- Ícone de menu (3 pontos) -->
+      <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        <circle cx="5" cy="12" r="2"/>
+        <circle cx="12" cy="12" r="2"/>
+        <circle cx="19" cy="12" r="2"/>
+      </svg>
+    </div>
+
+    <!-- Caixa de transcrição -->
+    <div class="transcricao" id="transcricao">
+      Transcrição em tempo real aparecerá aqui...
+    </div>
+
+    <!-- Barra inferior -->
+    <div class="bottom-bar">
+      <!-- Galeria -->
+      <div class="small-btn">
+        <svg class="bottom-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M21 19V5H3v14h18zM3 3h18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>
+          <path d="M10 12l2 2 3-3 4 4H5z"/>
+        </svg>
+      </div>
+
+      <!-- Botão de captura -->
+      <button class="circle-btn" title="Capturar"></button>
+
+      <!-- Alternar câmera -->
+      <div class="small-btn">
+        <svg class="bottom-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5 0 .46-.06.9-.18 1.32l1.46 1.46A6.98 6.98 0 0 0 19 13c0-3.87-3.13-7-7-7zm-7.82.68A6.98 6.98 0 0 0 5 11c0 3.87 3.13 7 7 7v3l4-4-4-4v3c-2.76 0-5-2.24-5-5 0-.46.06-.9.18-1.32L3.72 6.68z"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

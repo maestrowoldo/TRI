@@ -1,0 +1,137 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: #000;
+  overflow: hidden;
+}
+
+/* Área principal ocupando TELAS GRANDES + MOBILE */
+.camera-wrapper {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* CÂMERA - sempre cobre tudo */
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* Barra superior */
+.top-bar {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 10;
+}
+
+.icon {
+  width: 28px;
+  height: 28px;
+  fill: #f1f1f1;
+  opacity: 0.9;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+/* Caixa de transcrição */
+.transcricao {
+  position: absolute;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 700px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 12px;
+  padding: 14px 18px;
+  text-align: center;
+  font-size: clamp(12px, 2vw, 18px);
+  color: #e0e0e0;
+  backdrop-filter: blur(12px);
+  z-index: 9;
+}
+
+/* Barra inferior */
+.bottom-bar {
+  position: absolute;
+  bottom: 30px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 30px;
+  z-index: 10;
+}
+
+/* Botão de captura */
+.circle-btn {
+  width: clamp(60px, 12vw, 90px);
+  height: clamp(60px, 12vw, 90px);
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background-color: transparent;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.circle-btn::before {
+  content: "";
+  position: absolute;
+  width: 60%;
+  height: 60%;
+  border-radius: 50%;
+  background-color: #fff;
+  opacity: 0.9;
+  transition: transform 0.15s ease;
+}
+
+.circle-btn:active::before {
+  transform: scale(0.85);
+}
+
+/* Botões menores */
+.small-btn {
+  width: clamp(40px, 8vw, 60px);
+  height: clamp(40px, 8vw, 60px);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.08);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.15);
+  cursor: pointer;
+}
+
+.bottom-icon {
+  width: clamp(18px, 4vw, 26px);
+  height: clamp(18px, 4vw, 26px);
+  fill: #fff;
+  opacity: 0.9;
+}
