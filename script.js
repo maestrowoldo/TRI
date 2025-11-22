@@ -1,66 +1,115 @@
-let usandoCameraFrontal = false;
-let streamAtual = null;
+let usandoFrontal = false;
+let model;
+let speechEnabled = true;
 
-// Função para iniciar câmera com base no modo
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const transcricao = document.getElementById("transcricao");
+
+/* -------------------------------------------
+      INICIAR CÂMERA
+------------------------------------------- */
 async function iniciarCamera() {
-  if (streamAtual) {
-    streamAtual.getTracks().forEach(t => t.stop());
-  }
-
-  try {
-    const constraints = {
-      video: {
-        facingMode: usandoCameraFrontal ? "user" : "environment"
-      }
-    };
-
-    streamAtual = await navigator.mediaDevices.getUserMedia(constraints);
-
-    const video = document.getElementById("video");
-    video.srcObject = streamAtual;
-  } catch (err) {
-    console.log("Erro ao acessar a câmera:", err);
-  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: usandoFrontal ? "user" : "environment" }
+  });
+  video.srcObject = stream;
 }
 
-// Alternar entre frontal e traseira
 document.getElementById("toggleCamera").addEventListener("click", () => {
-  usandoCameraFrontal = !usandoCameraFrontal;
+  usandoFrontal = !usandoFrontal;
   iniciarCamera();
 });
 
-// Capturar imagem e enviar ao backend
-document.getElementById("captureBtn").addEventListener("click", async () => {
-  const video = document.getElementById("video");
-
-  const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-  const base64Image = canvas.toDataURL("image/jpeg");
-
-  // CHAMAR API DO BACKEND
-  await enviarParaBackend(base64Image);
+/* -------------------------------------------
+      CAPTURAR FOTO
+------------------------------------------- */
+document.getElementById("captureBtn").addEventListener("click", () => {
+  const c = document.createElement("canvas");
+  c.width = video.videoWidth;
+  c.height = video.videoHeight;
+  c.getContext("2d").drawImage(video, 0, 0);
 });
 
-// Função para enviar imagem ao backend
-async function enviarParaBackend(imagemBase64) {
-  try {
-    const response = await fetch("https://seu-backend.com/api/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imagem: imagemBase64 })
-    });
+/* -------------------------------------------
+      AJUDA
+------------------------------------------- */
+const helpModal = document.getElementById("helpModal");
+document.getElementById("helpBtn").onclick = () => helpModal.classList.remove("hidden");
+document.getElementById("closeHelp").onclick = () => helpModal.classList.add("hidden");
 
-    const data = await response.json();
-    console.log("Resposta do backend:", data);
-  } catch (error) {
-    console.error("Erro ao enviar imagem:", error);
-  }
+/* -------------------------------------------
+      TRANSCRIÇÃO DE VOZ (Web Speech API)
+------------------------------------------- */
+let recognizer = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+recognizer.lang = "pt-BR";
+recognizer.continuous = true;
+
+recognizer.onresult = e => {
+  const text = e.results[e.results.length - 1][0].transcript;
+  transcricao.innerText = text;
+};
+
+recognizer.start();
+
+/* -------------------------------------------
+      DETECÇÃO DE OBJETOS
+------------------------------------------- */
+async function carregarModelo() {
+  model = await cocoSsd.load();
+  detectar();
 }
 
-// Iniciar câmera ao abrir página
+async function detectar() {
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const objetos = await model.detect(video);
+  const nomes = [];
+
+  objetos.forEach(obj => {
+    if (obj.score < 0.6) return;
+
+    nomes.push(obj.class);
+
+    ctx.strokeStyle = "#00FF00";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(obj.bbox[0], obj.bbox[1], obj.bbox[2], obj.bbox[3]);
+
+    ctx.fillStyle = "#00FF00";
+    ctx.fillText(obj.class, obj.bbox[0], obj.bbox[1] - 5);
+  });
+
+  // Fala automática
+  if (nomes.length) {
+    falar("Vejo " + [...new Set(nomes)].join(", "));
+  }
+
+  requestAnimationFrame(detectar);
+}
+
+/* -------------------------------------------
+      VOZ (SpeechSynthesis)
+------------------------------------------- */
+let ultimaFrase = "";
+function falar(texto) {
+  if (!speechEnabled) return;
+  if (texto === ultimaFrase) return;
+
+  const u = new SpeechSynthesisUtterance(texto);
+  u.lang = "pt-BR";
+  speechSynthesis.speak(u);
+
+  ultimaFrase = texto;
+}
+
+/* -------------------------------------------
+      INICIAR SISTEMA
+------------------------------------------- */
+video.addEventListener("loadeddata", () => {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+});
+
 iniciarCamera();
+carregarModelo();
