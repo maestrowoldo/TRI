@@ -1,115 +1,64 @@
-let usandoFrontal = false;
-let model;
-let speechEnabled = true;
+// ----------- SPLASH SCREEN -------------
+window.onload = () => {
+  setTimeout(() => {
+    document.getElementById("splash").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    iniciarCamera();
+  }, 3000);
+};
 
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const transcricao = document.getElementById("transcricao");
+// ----------- AJUDA (MODAL) -------------
+const helpBtn = document.getElementById("helpBtn");
+const helpModal = document.getElementById("helpModal");
+const closeHelp = document.getElementById("closeHelp");
+const helpSecondary = document.getElementById("helpSecondary");
 
-/* -------------------------------------------
-      INICIAR CÂMERA
-------------------------------------------- */
+helpBtn.onclick = () => helpModal.style.display = "flex";
+helpSecondary.onclick = () => helpModal.style.display = "flex";
+closeHelp.onclick = () => helpModal.style.display = "none";
+
+// ----------- CÂMERA -------------
+let usandoCameraFrontal = false;
+let streamAtual = null;
+
 async function iniciarCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: usandoFrontal ? "user" : "environment" }
-  });
-  video.srcObject = stream;
+  if (streamAtual) {
+    streamAtual.getTracks().forEach(t => t.stop());
+  }
+
+  try {
+    const constraints = {
+      video: {
+        facingMode: usandoCameraFrontal ? "user" : "environment"
+      }
+    };
+
+    streamAtual = await navigator.mediaDevices.getUserMedia(constraints);
+    document.getElementById("video").srcObject = streamAtual;
+
+  } catch (e) {
+    console.error("Erro ao acessar câmera:", e);
+  }
 }
 
+// alternar câmera
 document.getElementById("toggleCamera").addEventListener("click", () => {
-  usandoFrontal = !usandoFrontal;
+  usandoCameraFrontal = !usandoCameraFrontal;
   iniciarCamera();
 });
 
-/* -------------------------------------------
-      CAPTURAR FOTO
-------------------------------------------- */
-document.getElementById("captureBtn").addEventListener("click", () => {
-  const c = document.createElement("canvas");
-  c.width = video.videoWidth;
-  c.height = video.videoHeight;
-  c.getContext("2d").drawImage(video, 0, 0);
-});
+// capturar imagem
+document.getElementById("captureBtn").addEventListener("click", async () => {
+  const video = document.getElementById("video");
 
-/* -------------------------------------------
-      AJUDA
-------------------------------------------- */
-const helpModal = document.getElementById("helpModal");
-document.getElementById("helpBtn").onclick = () => helpModal.classList.remove("hidden");
-document.getElementById("closeHelp").onclick = () => helpModal.classList.add("hidden");
-
-/* -------------------------------------------
-      TRANSCRIÇÃO DE VOZ (Web Speech API)
-------------------------------------------- */
-let recognizer = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-recognizer.lang = "pt-BR";
-recognizer.continuous = true;
-
-recognizer.onresult = e => {
-  const text = e.results[e.results.length - 1][0].transcript;
-  transcricao.innerText = text;
-};
-
-recognizer.start();
-
-/* -------------------------------------------
-      DETECÇÃO DE OBJETOS
-------------------------------------------- */
-async function carregarModelo() {
-  model = await cocoSsd.load();
-  detectar();
-}
-
-async function detectar() {
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-  const objetos = await model.detect(video);
-  const nomes = [];
-
-  objetos.forEach(obj => {
-    if (obj.score < 0.6) return;
-
-    nomes.push(obj.class);
-
-    ctx.strokeStyle = "#00FF00";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(obj.bbox[0], obj.bbox[1], obj.bbox[2], obj.bbox[3]);
-
-    ctx.fillStyle = "#00FF00";
-    ctx.fillText(obj.class, obj.bbox[0], obj.bbox[1] - 5);
-  });
-
-  // Fala automática
-  if (nomes.length) {
-    falar("Vejo " + [...new Set(nomes)].join(", "));
-  }
-
-  requestAnimationFrame(detectar);
-}
-
-/* -------------------------------------------
-      VOZ (SpeechSynthesis)
-------------------------------------------- */
-let ultimaFrase = "";
-function falar(texto) {
-  if (!speechEnabled) return;
-  if (texto === ultimaFrase) return;
-
-  const u = new SpeechSynthesisUtterance(texto);
-  u.lang = "pt-BR";
-  speechSynthesis.speak(u);
-
-  ultimaFrase = texto;
-}
-
-/* -------------------------------------------
-      INICIAR SISTEMA
-------------------------------------------- */
-video.addEventListener("loadeddata", () => {
+  const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-});
 
-iniciarCamera();
-carregarModelo();
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const base64Image = canvas.toDataURL("image/jpeg");
+
+  console.log("Capturado:", base64Image);
+});
