@@ -3,54 +3,76 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TRI Vision 2.0</title>
+  <title>TRI – Detector de Objetos</title>
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@flaticon/uicons/css/all.css">
   <link rel="stylesheet" href="style.css" />
-
-  <!-- Tensorflow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 </head>
 
 <body>
 
-  <div class="camera-wrapper">
-    <video id="video" playsinline autoplay></video>
-    <canvas id="canvas"></canvas>
-
-    <!-- Barra superior estilo iPhone -->
-    <div class="top-bar">
-      <i id="helpBtn" class="fi fi-sr-question-square help-icon"></i>
-      <i id="flashBtn" class="fi fi-rr-bolt flash-icon"></i>
-    </div>
-
-    <!-- Transcrição em tempo real -->
-    <div class="transcricao" id="transcricao">Transcrição...</div>
-
-    <!-- Barra inferior -->
-    <div class="bottom-bar">
-      <div id="toggleCamera" class="small-btn">
-        <i class="fi fi-sr-rotate-right bottom-icon"></i>
-      </div>
-
-      <button id="captureBtn" class="circle-btn"></button>
-
-      <div id="galleryBtn" class="small-btn">
-        <i class="fi fi-br-picture bottom-icon"></i>
-      </div>
-    </div>
+  <!-- Splash Screen (3 segundos) -->
+  <div id="splash" class="splash-screen">
+    <img src="splash.png" alt="TRI Logo" class="splash-img-full">
   </div>
 
-  <!-- Modal de ajuda -->
-  <div id="helpModal" class="help-modal hidden">
+  <!-- Wrapper principal -->
+  <div class="camera-wrapper" id="app">
+
+    <video id="video" autoplay playsinline></video>
+
+    <!-- Top Bar -->
+    <div class="top-bar">
+
+      <!-- Ícone de ajuda -->
+      <i id="helpBtn" class="fi fi-sr-question-square help-icon"></i>
+
+      <!-- Ícone de menu (3 pontos) -->
+      <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        <circle cx="5" cy="12" r="2"/>
+        <circle cx="12" cy="12" r="2"/>
+        <circle cx="19" cy="12" r="2"/>
+      </svg>
+    </div>
+
+    <!-- Transcrição -->
+    <div class="transcricao" id="transcricao">
+      Transcrição em tempo real aparecerá aqui...
+    </div>
+
+    <!-- Bottom Bar -->
+<div class="bottom-bar">
+
+  <!-- Botão Ajuda -->
+      <div id="helpSecondary" class="small-btn">
+        <i class="bi bi-question-circle bottom-icon"></i>
+      </div>
+
+      <!-- Botão Capturar -->
+      <button id="captureBtn" class="circle-btn"></button>
+
+      <!-- Alternar Câmera -->
+      <div id="toggleCamera" class="small-btn">
+        <i class="bi bi-arrow-repeat bottom-icon"></i>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Modal de Ajuda -->
+  <div id="helpModal" class="help-modal">
     <div class="help-content">
       <h2>Ajuda</h2>
-      <p>• Aponte a câmera e o sistema vai reconhecer objetos<br>
-         • Toque no botão grande para capturar<br>
-         • O sistema lê em voz tudo que for reconhecido<br>
-         • A transcrição aparece acima do botão<br></p>
-      <button id="closeHelp" class="close-help">OK</button>
+      <ul>
+        <li> Como usar o detector de objetos</li>
+        <li> Ative o volume para ouvir os alertas</li>
+        <li> Mantenha a câmera apontada para o ambiente</li>
+        <li> Dicas para melhor detecção</li>
+        <li> Suporte / FAQ</li>
+      </ul>
+      <button id="closeHelp" class="close-help">Fechar</button>
     </div>
   </div>
 
