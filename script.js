@@ -89,29 +89,29 @@ pauseBtn?.addEventListener("click", () => {
 });
 
 volumeRange?.addEventListener("input", () => {
-  speechSettings.volume = parseFloat(volumeRange.value);
+  speechSettings.volume = Number.parseFloat(volumeRange.value);
 });
 
 rateRange?.addEventListener("input", () => {
-  speechSettings.rate = parseFloat(rateRange.value);
+  speechSettings.rate = Number.parseFloat(rateRange.value);
 });
 
 thresholdRange?.addEventListener("input", () => {
-  detectionSettings.minScore = parseFloat(thresholdRange.value);
+  detectionSettings.minScore = Number.parseFloat(thresholdRange.value);
 });
 
 /* ----------------- CONFIGS ----------------- */
 const detectionSettings = {
-  minScore: parseFloat(thresholdRange?.value || 0.55),
+  minScore: Number.parseFloat(thresholdRange?.value || 0.55),
   globalCooldown: 3000,        // ms mínimo entre falas
   perLabelCooldown: 7000      // ms antes de repetir a mesma label
 };
 
 const speechSettings = {
   lang: langSelect?.value || "pt-BR",
-  volume: parseFloat(volumeRange?.value || 0.9),
-  rate: parseFloat(rateRange?.value || 1.0),
-  pitch: 1.0
+  volume: Number.parseFloat(volumeRange?.value || 0.9),
+  rate: Number.parseFloat(rateRange?.value || 1),
+  pitch: 1
 };
 
 langSelect?.addEventListener("change", () => {
@@ -132,7 +132,7 @@ function availableVoices() {
 
 async function speak(text, opts = {}) {
   if (!ttsEnabled) return;
-  if (!("speechSynthesis" in window)) {
+  if (!("speechSynthesis" in globalThis)) {
     console.warn("TTS não disponível neste navegador.");
     return;
   }
@@ -146,9 +146,11 @@ async function speak(text, opts = {}) {
   // escolher voz que combine com idioma (preferir pt-BR)
   try {
     const voices = await availableVoices();
-    const prefer = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(lang.toLowerCase()));
+    const prefer = voices.find(v => v.lang?.toLowerCase().startsWith(lang.toLowerCase()));
     if (prefer) utter.voice = prefer;
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    console.warn("Erro ao selecionar voz:", e);
+  }
 
   // fala
   try {
@@ -212,7 +214,7 @@ async function carregarModelo() {
 }
 
 async function iniciarCamera() {
-  if (streamAtual) streamAtual.getTracks().forEach(t => t.stop());
+  if (streamAtual) streamAtual.getTracks().for(t => t.stop());
   try {
     const constraints = {
       audio: false,
@@ -396,3 +398,23 @@ window.addEventListener("beforeunload", () => {
   if (streamAtual) streamAtual.getTracks().forEach(t => t.stop());
   if (rafId) cancelAnimationFrame(rafId);
 });
+
+/* Teste simples
+if ('speechSynthesis' in window) {
+  console.log('speechSynthesis OK');
+  console.log('voices (imediatas):', speechSynthesis.getVoices());
+  speechSynthesis.onvoiceschanged = () => {
+    console.log('voices changed event — voices agora:', speechSynthesis.getVoices());
+  };
+  const u = new SpeechSynthesisUtterance('Teste de fala. Se você ouvir isto, a síntese funciona.');
+  u.lang = 'pt-BR';
+  u.volume = 1;
+  u.rate = 1;
+  u.pitch = 1;
+  u.onstart = () => console.log('TTS: começou');
+  u.onend = () => console.log('TTS: terminou');
+  u.onerror = (e) => console.log('TTS erro', e);
+  speechSynthesis.speak(u);
+} else {
+  console.log('SpeechSynthesis não disponível neste navegador.');
+}*/
