@@ -280,12 +280,14 @@ menuToggle?.addEventListener('click', () => { warmUpVoices().catch(()=>{}); });
 captureBtn?.addEventListener('click', () => { warmUpVoices().catch(()=>{}); });
 
 
-/* ----------------- Frases amigáveis por classe ----------------- */
+// ===== Expansão de frases + aliases para rótulos comuns =====
 const LABEL_PHRASES_PT = {
   person: ["Vejo uma pessoa.", "Há alguém aqui."],
   bottle: ["Vejo uma garrafa.", "Há uma garrafa na superfície."],
   cup: ["Vejo um copo."],
-  cell_phone: ["Vejo um telefone celular."],
+  "cell phone": ["Vejo um telefone celular.", "Há um celular."],
+  cell_phone: ["Vejo um telefone celular.", "Há um celular."],
+  phone: ["Vejo um telefone.", "Há um celular."],
   dog: ["Vejo um cachorro."],
   cat: ["Vejo um gato."],
   chair: ["Há uma cadeira."],
@@ -293,8 +295,96 @@ const LABEL_PHRASES_PT = {
   car: ["Vejo um carro."],
   bicycle: ["Vejo uma bicicleta."],
   backpack: ["Vejo uma mochila."],
-  // adicionar mais conforme necessário
+  person_sitting: ["Vejo uma pessoa sentada."],
+  // Adicione outras variações aqui conforme necessário
 };
+
+// (opcional) aliases adicionais para normalizar rótulos
+const LABEL_ALIASES = {
+  "cellphone": "cell phone",
+  "mobile_phone": "cell phone",
+  "mobile": "cell phone",
+  "handbag": "backpack",
+  "pottedplant": "plant",
+  "tvmonitor": "tv",
+  // adicione conforme observar rótulos que o modelo devolve
+};
+
+// DEBUG: força falar mesmo com cooldown (só para testar no site publicado). Depois deixe false.
+const DEBUG_FORCE_SPEAK = true;
+
+// ===== handleAnnouncements (substituir a função antiga por esta) =====
+function handleAnnouncements(predictions) {
+  console.log('handleAnnouncements chamado. ttsEnabled=', ttsEnabled, 'predictions=', predictions && predictions.length);
+
+  if (typeof ttsEnabled !== 'undefined' && !ttsEnabled) {
+    console.log('handleAnnouncements: ttsDisabled => não fala');
+    return;
+  }
+
+  const now = Date.now();
+
+  // respeitar cooldown global (exceto em DEBUG_FORCE_SPEAK)
+  if (!DEBUG_FORCE_SPEAK && (now - lastGlobalSpeak < detectionSettings.globalCooldown)) {
+    console.log('handleAnnouncements: pulou por globalCooldown');
+    return;
+  }
+
+  const good = (predictions || []).filter(p => p.score >= detectionSettings.minScore);
+  if (!good.length) {
+    console.log('handleAnnouncements: nenhum com score suficiente');
+    return;
+  }
+
+  // ordenar por score
+  good.sort((a,b) => b.score - a.score);
+
+  // prioridade simples
+  const priorityOrder = ["person", "dog", "cat", "bicycle", "car", "bottle", "cup"];
+  let chosen = good[0];
+
+  for (const p of good) {
+    const pi = priorityOrder.indexOf(p.class);
+    const ci = priorityOrder.indexOf(chosen.class);
+    if (pi !== -1 && (ci === -1 || pi < ci)) chosen = p;
+  }
+
+  // normalizar label (aliases)
+  let label = chosen.class;
+  if (LABEL_ALIASES[label]) label = LABEL_ALIASES[label];
+
+  // se não existirem frases, use fallback
+  let phrase = null;
+  if (speechSettings.lang && speechSettings.lang.startsWith('pt')) {
+    const arr = LABEL_PHRASES_PT[label] || LABEL_PHRASES_PT[label.toLowerCase()] || null;
+    if (arr) phrase = arr[Math.floor(Math.random()*arr.length)];
+    else phrase = `Vejo um ${label}.`;
+  } else {
+    const arr = LABEL_PHRASES_EN[label] || null;
+    if (arr) phrase = arr[Math.floor(Math.random()*arr.length)];
+    else phrase = `I see a ${label}.`;
+  }
+
+  // debug logs detalhados
+  console.log('handleAnnouncements: chosen=', chosen, 'normalized label=', label, 'phrase=', phrase, 'score=', chosen.score);
+
+  // checar cooldown por label (exceto DEBUG)
+  const lastForLabel = lastSpokeForLabel[label] || 0;
+  if (!DEBUG_FORCE_SPEAK && (now - lastForLabel < detectionSettings.perLabelCooldown)) {
+    console.log(`handleAnnouncements: label "${label}" em cooldown (${now - lastForLabel}ms)`);
+    return;
+  }
+
+  // chamar speak (já tem logs)
+  const didSpeak = speak(phrase);
+  console.log('handleAnnouncements: speak chamado, retornou=', didSpeak);
+
+  lastGlobalSpeak = now;
+  lastSpokeForLabel[label] = now;
+
+  // atualiza texto para leitores de tela
+  srLive && (srLive.innerText = phrase);
+}
 
 const LABEL_PHRASES_EN = {
   person: ["I see a person."],
