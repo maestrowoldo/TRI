@@ -1,6 +1,7 @@
-// script.js - versão com TTS para acessibilidade (PT-BR)
-// Presume existência de: video, overlay(canvas), transcricao, captureBtn, toggleCamera, etc.
+// script.js — Detector com TTS (PT-BR) — Versão revisada
+// Requisitos: index.html deve conter elementos com IDs usados abaixo (video, overlay, splash, app, etc.)
 
+/* ========================= INIT & UI ========================= */
 window.onload = () => {
   setTimeout(() => {
     const splash = document.getElementById("splash");
@@ -11,60 +12,48 @@ window.onload = () => {
   }, 1200);
 };
 
-// ===== Menu de três pontos: abrir/fechar com acessibilidade =====
+// Top / menu controls (may be null if DOM order different)
 const menuToggle = document.getElementById("menuToggle");
 const menuPanel = document.getElementById("menuPanel");
 const closeMenuBtn = document.getElementById("closeMenu");
 
-function setMenuOpen(open) {
-  if (!menuPanel || !menuToggle) return;
-  menuPanel.setAttribute("aria-hidden", String(!open));
-  menuToggle.setAttribute("aria-expanded", String(open));
-  if (open) {
-    const first = menuPanel.querySelector("button, [tabindex]:not([tabindex='-1'])");
-    if (first) first.focus();
-  } else {
-    menuToggle.focus();
-  }
-}
-
-menuToggle?.addEventListener("click", (e) => {
-  const isOpen = menuPanel?.getAttribute("aria-hidden") === "false";
-  setMenuOpen(!isOpen);
-});
-
-document.addEventListener("click", (e) => {
-  if (!menuPanel || !menuToggle) return;
-  if (menuPanel.getAttribute("aria-hidden") === "false") {
-    const target = e.target;
-    if (!menuPanel.contains(target) && !menuToggle.contains(target)) {
-      setMenuOpen(false);
-    }
-  }
-}, { capture: true });
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    if (menuPanel && menuPanel.getAttribute("aria-hidden") === "false") {
-      setMenuOpen(false);
-    }
-  }
-});
-
-closeMenuBtn?.addEventListener("click", () => setMenuOpen(false));
-
-
-// ----------- AJUDA (MODAL) -------------
+// Help modal controls
 const helpBtn = document.getElementById("helpBtn");
 const helpModal = document.getElementById("helpModal");
 const closeHelp = document.getElementById("closeHelp");
 const helpSecondary = document.getElementById("helpSecondary");
 
-helpBtn.onclick = () => helpModal.style.display = "flex";
-helpSecondary.onclick = () => helpModal.style.display = "flex";
-closeHelp.onclick = () => helpModal.style.display = "none";
+helpBtn?.addEventListener("click", () => { if (helpModal) helpModal.style.display = "flex"; });
+helpSecondary?.addEventListener("click", () => { if (helpModal) helpModal.style.display = "flex"; });
+closeHelp?.addEventListener("click", () => { if (helpModal) helpModal.style.display = "none"; });
 
-/* ----------------- CONTROLES / ARIA ----------------- */
+// Menu open/close (keeps UI clean)
+function setMenuOpen(open) {
+  if (!menuPanel || !menuToggle) return;
+  menuPanel.setAttribute("aria-hidden", String(!open));
+  menuToggle.setAttribute("aria-expanded", String(open));
+  if (open) {
+    const first = menuPanel.querySelector("button, input, select, [tabindex]:not([tabindex='-1'])");
+    if (first) first.focus();
+  } else {
+    menuToggle.focus();
+  }
+}
+menuToggle?.addEventListener("click", () => {
+  const isOpen = menuPanel?.getAttribute("aria-hidden") === "false";
+  setMenuOpen(!isOpen);
+});
+document.addEventListener("click", (e) => {
+  if (!menuPanel || !menuToggle) return;
+  if (menuPanel.getAttribute("aria-hidden") === "false") {
+    const target = e.target;
+    if (!menuPanel.contains(target) && !menuToggle.contains(target)) setMenuOpen(false);
+  }
+}, { capture: true });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenuOpen(false); });
+closeMenuBtn?.addEventListener("click", () => setMenuOpen(false));
+
+/* ========================= CONTROLS & STATE ========================= */
 const ttsToggle = document.getElementById("ttsToggle");
 const pauseBtn = document.getElementById("pauseBtn");
 const volumeRange = document.getElementById("volumeRange");
@@ -76,51 +65,37 @@ const srLive = document.getElementById("srLive");
 let ttsEnabled = true;
 let paused = false;
 
+// init ttsEnabled from localStorage
+try {
+  const saved = localStorage.getItem('tri_ttsEnabled');
+  if (saved !== null) ttsEnabled = saved === '1';
+} catch (e) { /* ignore */ }
+
+// sync UI if buttons exist
+if (ttsToggle) { ttsToggle.innerText = ttsEnabled ? "🔊 Falar" : "🔈 Mudo"; ttsToggle.setAttribute("aria-pressed", String(ttsEnabled)); }
 ttsToggle?.addEventListener("click", () => {
   ttsEnabled = !ttsEnabled;
   ttsToggle.innerText = ttsEnabled ? "🔊 Falar" : "🔈 Mudo";
   ttsToggle.setAttribute("aria-pressed", String(ttsEnabled));
-   console.log('TTS toggled. now ttsEnabled=', ttsEnabled);
-
-   try { localStorage.setItem('tri_ttsEnabled', ttsEnabled ? '1' : '0'); } catch(e){}
+  console.log('TTS toggled. now ttsEnabled=', ttsEnabled);
+  try { localStorage.setItem('tri_ttsEnabled', ttsEnabled ? '1' : '0'); } catch(e){}
 });
-
-// ler preferência ao carregar
-try {
-  const saved = localStorage.getItem('tri_ttsEnabled');
-  if (saved !== null) {
-    ttsEnabled = saved === '1';
-    if (ttsToggle) {
-      ttsToggle.innerText = ttsEnabled ? "🔊 Falar" : "🔈 Mudo";
-      ttsToggle.setAttribute("aria-pressed", String(ttsEnabled));
-    }
-  }
-} catch(e){}
-
 
 pauseBtn?.addEventListener("click", () => {
   paused = !paused;
   pauseBtn.innerText = paused ? "▶️ Retomar" : "⏸ Pausar";
-  if (!paused && !model) carregarModelo();
+  if (!paused && model == null) carregarModelo();
 });
 
-volumeRange?.addEventListener("input", () => {
-  speechSettings.volume = Number.parseFloat(volumeRange.value);
-});
+volumeRange?.addEventListener("input", () => { speechSettings.volume = Number.parseFloat(volumeRange.value); });
+rateRange?.addEventListener("input", () => { speechSettings.rate = Number.parseFloat(rateRange.value); });
+thresholdRange?.addEventListener("input", () => { detectionSettings.minScore = Number.parseFloat(thresholdRange.value); });
 
-rateRange?.addEventListener("input", () => {
-  speechSettings.rate = Number.parseFloat(rateRange.value);
-});
-
-thresholdRange?.addEventListener("input", () => {
-  detectionSettings.minScore = Number.parseFloat(thresholdRange.value);
-});
-
-/* ----------------- CONFIGS ----------------- */
+/* ========================= SETTINGS ========================= */
 const detectionSettings = {
   minScore: Number.parseFloat(thresholdRange?.value || 0.55),
-  globalCooldown: 3000,        // ms mínimo entre falas
-  perLabelCooldown: 7000      // ms antes de repetir a mesma label
+  globalCooldown: 3000,
+  perLabelCooldown: 7000
 };
 
 const speechSettings = {
@@ -129,27 +104,21 @@ const speechSettings = {
   rate: Number.parseFloat(rateRange?.value || 1),
   pitch: 1
 };
+langSelect?.addEventListener("change", () => { speechSettings.lang = langSelect.value; });
 
-langSelect?.addEventListener("change", () => {
-  speechSettings.lang = langSelect.value;
-});
-
-/* ----------------- TTS helpers ----------------- */
-// ----------------- TTS robusto + warm-up (cole/replace aqui) -----------------
+/* ========================= TTS HELPERS ========================= */
+// flags
 let _voicesReady = false;
 let _didWarmUp = false;
 
-// beep fallback (data URI curto) — você pode ajustar
+// beep fallback
 const beep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=");
 
-// Tenta obter vozes, esperando evento voiceschanged (fallback timeout)
+// get voices once (waits for voiceschanged with timeout)
 async function getVoicesOnce(timeout = 1800) {
   if (!('speechSynthesis' in window)) return [];
   const cached = speechSynthesis.getVoices();
-  if (cached && cached.length) {
-    _voicesReady = true;
-    return cached;
-  }
+  if (cached && cached.length) { _voicesReady = true; return cached; }
   return await new Promise(resolve => {
     let done = false;
     const handler = () => {
@@ -168,19 +137,15 @@ async function getVoicesOnce(timeout = 1800) {
   });
 }
 
-// Warm-up: chamar em resposta a um gesto do usuário (click no menu, capture, etc.)
 async function warmUpVoices() {
   if (_didWarmUp) return;
   _didWarmUp = true;
   try {
     const v = await getVoicesOnce(2000);
     console.log('warmUpVoices -> voices count =', v.length, v.map(vi => vi.lang + ' :: ' + vi.name));
-  } catch (e) {
-    console.warn('warmUpVoices erro', e);
-  }
+  } catch (e) { console.warn('warmUpVoices erro', e); }
 }
 
-// fallback sonoro simples
 function playBeep() {
   try {
     beep.volume = Math.min(1, (speechSettings && speechSettings.volume) ? speechSettings.volume : 1);
@@ -189,98 +154,65 @@ function playBeep() {
   } catch (e) {}
 }
 
-// Função speak mais robusta
 async function speak(text, opts = {}) {
   console.log('speak() chamado com:', text);
-
-  // checa se TTS está habilitado por configuração da sua app
-  if (typeof ttsEnabled !== 'undefined' && !ttsEnabled) {
-    console.log('TTS desabilitado (ttsEnabled=false).');
-    return false;
-  }
-
-  if (!('speechSynthesis' in window)) {
-    console.warn('SpeechSynthesis não disponível no navegador — usando beep fallback.');
-    playBeep();
-    return false;
-  }
-
-  // garantia: se não houve interação do usuário, algumas plataformas bloqueiam vozes.
-  // warmUpVoices deve ter sido chamado após um gesto do usuário (ver listener abaixo).
+  if (typeof ttsEnabled !== 'undefined' && !ttsEnabled) { console.log('TTS desabilitado (ttsEnabled=false).'); return false; }
+  if (!('speechSynthesis' in window)) { console.warn('SpeechSynthesis não disponível — beep fallback.'); playBeep(); return false; }
   if (!_didWarmUp) {
     console.log('warmUp não executado ainda; tentando agora antes de falar.');
     await warmUpVoices();
   }
-
   try {
     const voices = await getVoicesOnce(1500);
     const settings = { ...speechSettings, ...opts };
-
-    // monta utterance
     const u = new SpeechSynthesisUtterance(text);
     u.lang = settings.lang || 'pt-BR';
     u.volume = typeof settings.volume === 'number' ? settings.volume : 1;
     u.rate = typeof settings.rate === 'number' ? settings.rate : 1;
     u.pitch = typeof settings.pitch === 'number' ? settings.pitch : 1;
 
-    // seleciona voz preferida (match no começo da tag lang)
     if (voices && voices.length) {
       const prefer = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(u.lang.toLowerCase()));
-      if (prefer) {
-        u.voice = prefer;
-        console.log('speak -> usando voz preferida:', prefer.name, prefer.lang);
-      } else {
-        u.voice = voices[0];
-        console.log('speak -> usando voz fallback:', voices[0].name, voices[0].lang);
-      }
+      if (prefer) { u.voice = prefer; console.log('speak -> usando voz preferida:', prefer.name, prefer.lang); }
+      else { u.voice = voices[0]; console.log('speak -> usando voz fallback:', voices[0].name, voices[0].lang); }
     } else {
       console.warn('Nenhuma voice disponível; fallback para beep antes de tentar falar.');
-      // tocar beep curto para sinalizar tentativa
       playBeep();
-      // ainda assim tentamos falar (pode falhar silenciosamente)
     }
 
     u.onstart = () => console.log('TTS onstart');
     u.onend = () => console.log('TTS onend');
     u.onerror = (e) => console.error('TTS onerror', e);
 
-    // NÃO chame speechSynthesis.cancel() aqui — browsers podem bloquear se usado incorretamente.
-    // Se você quiser cancelar fala anterior, faça isso com lógica específica (ex: ao pausar/stop).
-
     speechSynthesis.speak(u);
     return true;
   } catch (err) {
     console.error('Erro em speak():', err);
-    // fallback auditivo
     playBeep();
     return false;
   }
 }
 
-// ----------------- Garantir warm-up em interação do usuário -----------------
-// Chamar warmUpVoices() em gestos comuns: clique no menu, botão capturar, ou primeiro toque no body.
+// attach warm-up to first user gesture (robust)
 function attachWarmUpOnUserGesture() {
   if (typeof window === 'undefined') return;
   const gestureHandler = (e) => {
-    warmUpVoices().catch(() => {});
-    // remove os listeners após primeiro gesto
+    try { warmUpVoices().catch(()=>{}); } catch(e){}
     document.removeEventListener('click', gestureHandler, { capture: true });
     document.removeEventListener('touchstart', gestureHandler, { capture: true });
   };
   document.addEventListener('click', gestureHandler, { capture: true });
   document.addEventListener('touchstart', gestureHandler, { capture: true });
-  document.addEventListener('click', () => { try { warmUpVoices(); } catch(e){} }, { once: true });
-
+  // redundancy: also run once non-capture
+  document.addEventListener('click', function _oneClick() {
+    try { warmUpVoices().catch(()=>{}); } catch(e){}
+    document.removeEventListener('click', _oneClick, { capture: false });
+  }, { capture: false });
 }
-// executar agora para garantir escuta do primeiro gesto
 attachWarmUpOnUserGesture();
 
-// exemplo: também ligar ao abrir do menu (se já tiver menuToggle)
-menuToggle?.addEventListener('click', () => { warmUpVoices().catch(()=>{}); });
-captureBtn?.addEventListener('click', () => { warmUpVoices().catch(()=>{}); });
-
-
-// ===== Expansão de frases + aliases para rótulos comuns =====
+/* ========================= LABELS & ANNOUNCE ========================= */
+// expanded phrases + aliases
 const LABEL_PHRASES_PT = {
   person: ["Vejo uma pessoa.", "Há alguém aqui."],
   bottle: ["Vejo uma garrafa.", "Há uma garrafa na superfície."],
@@ -295,108 +227,79 @@ const LABEL_PHRASES_PT = {
   car: ["Vejo um carro."],
   bicycle: ["Vejo uma bicicleta."],
   backpack: ["Vejo uma mochila."],
-  person_sitting: ["Vejo uma pessoa sentada."],
-  // Adicione outras variações aqui conforme necessário
+  person_sitting: ["Vejo uma pessoa sentada."]
 };
-
-// (opcional) aliases adicionais para normalizar rótulos
+const LABEL_PHRASES_EN = { person: ["I see a person."], bottle: ["I see a bottle."] };
 const LABEL_ALIASES = {
   "cellphone": "cell phone",
   "mobile_phone": "cell phone",
   "mobile": "cell phone",
   "handbag": "backpack",
   "pottedplant": "plant",
-  "tvmonitor": "tv",
-  // adicione conforme observar rótulos que o modelo devolve
+  "tvmonitor": "tv"
 };
 
-// DEBUG: força falar mesmo com cooldown (só para testar no site publicado). Depois deixe false.
-const DEBUG_FORCE_SPEAK = true;
+// set false in production (true forces speak ignoring cooldowns)
+const DEBUG_FORCE_SPEAK = false;
 
-// ===== handleAnnouncements (substituir a função antiga por esta) =====
+// announcement tracking
+let lastGlobalSpeak = 0;
+const lastSpokeForLabel = {};
+
+// normalize helper
+function normalizeLabel(label) {
+  if (!label) return label;
+  if (LABEL_ALIASES[label]) return LABEL_ALIASES[label];
+  return label;
+}
+
+// single authoritative handleAnnouncements (keeps logic consistent)
 function handleAnnouncements(predictions) {
   console.log('handleAnnouncements chamado. ttsEnabled=', ttsEnabled, 'predictions=', predictions && predictions.length);
-
-  if (typeof ttsEnabled !== 'undefined' && !ttsEnabled) {
-    console.log('handleAnnouncements: ttsDisabled => não fala');
-    return;
-  }
+  if (typeof ttsEnabled !== 'undefined' && !ttsEnabled) { console.log('TTS disabled'); return; }
 
   const now = Date.now();
-
-  // respeitar cooldown global (exceto em DEBUG_FORCE_SPEAK)
-  if (!DEBUG_FORCE_SPEAK && (now - lastGlobalSpeak < detectionSettings.globalCooldown)) {
-    console.log('handleAnnouncements: pulou por globalCooldown');
-    return;
-  }
+  if (!DEBUG_FORCE_SPEAK && (now - lastGlobalSpeak < detectionSettings.globalCooldown)) { console.log('skip globalCooldown'); return; }
 
   const good = (predictions || []).filter(p => p.score >= detectionSettings.minScore);
-  if (!good.length) {
-    console.log('handleAnnouncements: nenhum com score suficiente');
-    return;
-  }
+  if (!good.length) { console.log('no good predictions'); return; }
 
-  // ordenar por score
   good.sort((a,b) => b.score - a.score);
-
-  // prioridade simples
   const priorityOrder = ["person", "dog", "cat", "bicycle", "car", "bottle", "cup"];
   let chosen = good[0];
-
   for (const p of good) {
     const pi = priorityOrder.indexOf(p.class);
     const ci = priorityOrder.indexOf(chosen.class);
     if (pi !== -1 && (ci === -1 || pi < ci)) chosen = p;
   }
 
-  // normalizar label (aliases)
-  let label = chosen.class;
-  if (LABEL_ALIASES[label]) label = LABEL_ALIASES[label];
-
-  // se não existirem frases, use fallback
+  let label = normalizeLabel(chosen.class);
   let phrase = null;
   if (speechSettings.lang && speechSettings.lang.startsWith('pt')) {
     const arr = LABEL_PHRASES_PT[label] || LABEL_PHRASES_PT[label.toLowerCase()] || null;
-    if (arr) phrase = arr[Math.floor(Math.random()*arr.length)];
-    else phrase = `Vejo um ${label}.`;
+    phrase = arr ? arr[Math.floor(Math.random()*arr.length)] : `Vejo um ${label}.`;
   } else {
     const arr = LABEL_PHRASES_EN[label] || null;
-    if (arr) phrase = arr[Math.floor(Math.random()*arr.length)];
-    else phrase = `I see a ${label}.`;
+    phrase = arr ? arr[Math.floor(Math.random()*arr.length)] : `I see a ${label}.`;
   }
 
-  // debug logs detalhados
-  console.log('handleAnnouncements: chosen=', chosen, 'normalized label=', label, 'phrase=', phrase, 'score=', chosen.score);
+  console.log('announcement: chosen=', chosen, 'label=', label, 'phrase=', phrase, 'score=', chosen.score);
 
-  // checar cooldown por label (exceto DEBUG)
   const lastForLabel = lastSpokeForLabel[label] || 0;
   if (!DEBUG_FORCE_SPEAK && (now - lastForLabel < detectionSettings.perLabelCooldown)) {
-    console.log(`handleAnnouncements: label "${label}" em cooldown (${now - lastForLabel}ms)`);
-    return;
+    console.log(`label "${label}" cooldown ${now - lastForLabel}ms`); return;
   }
 
-  // chamar speak (já tem logs)
   const didSpeak = speak(phrase);
-  console.log('handleAnnouncements: speak chamado, retornou=', didSpeak);
+  console.log('didSpeak=', didSpeak);
 
   lastGlobalSpeak = now;
   lastSpokeForLabel[label] = now;
 
-  // atualiza texto para leitores de tela
   srLive && (srLive.innerText = phrase);
 }
 
-const LABEL_PHRASES_EN = {
-  person: ["I see a person."],
-  bottle: ["I see a bottle."],
-  // ...
-};
-
-/* ----------------- Regras de anúncio (cooldowns) ----------------- */
-let lastGlobalSpeak = 0;
-const lastSpokeForLabel = {}; // { label: timestamp }
-
-/* ----------------- Câmera / Modelo / Canvas ----------------- */
+/* ========================= CAMERA / MODEL / CANVAS ========================= */
 let model = null;
 let streamAtual = null;
 let usandoCameraFrontal = false;
@@ -405,69 +308,67 @@ let rafId = null;
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("overlay");
-const ctx = canvas.getContext("2d");
+const ctx = canvas ? canvas.getContext("2d") : null;
 const transcricao = document.getElementById("transcricao");
+const captureBtn = document.getElementById("captureBtn");
 
-const ALERT_OBJECTS = new Set(["person", "car", "bicycle", "dog", "cat", "bottle", "cup"]);
-
+// load model
 async function carregarModelo() {
   try {
-    transcricao.innerText = "Carregando modelo de detecção...";
+    if (transcricao) transcricao.innerText = "Carregando modelo de detecção...";
     model = await cocoSsd.load();
-    transcricao.innerText = "Modelo carregado. Detectando...";
+    if (transcricao) transcricao.innerText = "Modelo carregado. Detectando...";
     startDetectionLoop();
   } catch (e) {
     console.error("Erro ao carregar modelo:", e);
-    transcricao.innerText = "Erro ao carregar modelo. Ver console.";
+    if (transcricao) transcricao.innerText = "Erro ao carregar modelo. Ver console.";
   }
 }
 
+// corrected iniciarCamera
 async function iniciarCamera() {
-  if (streamAtual) streamAtual.getTracks().for(t => t.stop());
+  if (streamAtual) {
+    try { streamAtual.getTracks().forEach(t => t.stop()); } catch (e) { console.warn('erro parando tracks', e); }
+    streamAtual = null;
+  }
+
   try {
-    const constraints = {
-      audio: false,
-      video: { facingMode: usandoCameraFrontal ? "user" : "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
-    };
+    const constraints = { audio: false, video: { facingMode: usandoCameraFrontal ? "user" : "environment", width: { ideal: 1280 }, height: { ideal: 720 } } };
     streamAtual = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = streamAtual;
+    if (video) video.srcObject = streamAtual;
 
-    await new Promise(resolve => {
-      video.onloadedmetadata = () => {
-        resizeCanvas();
-        resolve();
-      };
-    });
+    await new Promise(resolve => { if (!video) return resolve(); video.onloadedmetadata = () => { resizeCanvas(); resolve(); }; });
 
-    if (!model) await carregarModelo();
-    else startDetectionLoop();
+    if (model == null) await carregarModelo(); else startDetectionLoop();
   } catch (e) {
     console.error("Erro ao acessar câmera:", e);
-    transcricao.innerText = "Permita acesso à câmera. Veja console.";
+    if (transcricao) transcricao.innerText = "Permita acesso à câmera. Veja console.";
   }
 }
 
 function resizeCanvas() {
+  if (!canvas || !video) return;
   canvas.width = video.videoWidth || video.clientWidth;
   canvas.height = video.videoHeight || video.clientHeight;
   canvas.style.width = "100%";
   canvas.style.height = "100%";
 }
 
+// toggle camera
 document.getElementById("toggleCamera")?.addEventListener("click", async () => {
   usandoCameraFrontal = !usandoCameraFrontal;
   await iniciarCamera();
 });
 
-// snapshot (mantive)
-document.getElementById("captureBtn")?.addEventListener("click", () => {
+// capture snapshot
+captureBtn?.addEventListener("click", () => {
   if (!video) return;
   const tmp = document.createElement("canvas");
   tmp.width = video.videoWidth;
   tmp.height = video.videoHeight;
   const c = tmp.getContext("2d");
   c.drawImage(video, 0, 0, tmp.width, tmp.height);
-  c.drawImage(canvas, 0, 0, tmp.width, tmp.height);
+  if (canvas) c.drawImage(canvas, 0, 0, tmp.width, tmp.height);
   const dataURL = tmp.toDataURL("image/jpeg", 0.9);
   const a = document.createElement("a");
   a.href = dataURL;
@@ -477,23 +378,16 @@ document.getElementById("captureBtn")?.addEventListener("click", () => {
   a.remove();
 });
 
-/* ----------------- Loop de detecção ----------------- */
+/* ========================= DETECTION LOOP ========================= */
 async function startDetectionLoop() {
-  if (!model || !video || video.readyState < 2) {
-    setTimeout(startDetectionLoop, 300);
-    return;
-  }
+  if (model == null || !video || video.readyState < 2) { setTimeout(startDetectionLoop, 300); return; }
   if (detectando) return;
   detectando = true;
 
   async function detectFrame() {
-    if (paused) {
-      rafId = requestAnimationFrame(detectFrame);
-      return;
-    }
+    if (paused) { rafId = requestAnimationFrame(detectFrame); return; }
     try {
       resizeCanvas();
-      // detect
       const predictions = await model.detect(video);
       drawPredictions(predictions);
       handleAnnouncements(predictions);
@@ -502,22 +396,22 @@ async function startDetectionLoop() {
     }
     rafId = requestAnimationFrame(detectFrame);
   }
-
   detectFrame();
 }
 
-/* ----------------- Desenho de caixas ----------------- */
+/* ========================= DRAW ========================= */
 function drawPredictions(predictions) {
+  if (!ctx || !canvas) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!predictions || !predictions.length) {
-    transcricao.innerText = "Nenhum objeto detectado.";
-    srLive && (srLive.innerText = "Nenhum objeto detectado.");
+    if (transcricao) transcricao.innerText = "Nenhum objeto detectado.";
+    if (srLive) srLive.innerText = "Nenhum objeto detectado.";
     return;
   }
 
   const labels = predictions.map(p => `${p.class} (${(p.score*100).toFixed(0)}%)`);
-  transcricao.innerText = labels.join(" • ");
-  srLive && (srLive.innerText = transcricao.innerText);
+  if (transcricao) transcricao.innerText = labels.join(" • ");
+  if (srLive) srLive.innerText = transcricao.innerText;
 
   predictions.forEach(pred => {
     if (pred.score < 0.01) return;
@@ -542,101 +436,16 @@ function drawPredictions(predictions) {
   });
 }
 
-/* ----------------- Lógica de anúncios (evita spam) ----------------- */
-function handleAnnouncements(predictions) {
-  if (!ttsEnabled) return;
-  const now = Date.now();
-
-  // respeitar cooldown global
-  if (now - lastGlobalSpeak < detectionSettings.globalCooldown) return;
-
-  // filtrar por score e ordenar por score
-  const good = (predictions || []).filter(p => p.score >= detectionSettings.minScore);
-  if (!good.length) return;
-
-  // escolher label prioritária (pessoa > animal > objeto)
-  // prioridade básica: person, dog/cat, then others
-  good.sort((a,b) => b.score - a.score);
-  const priorityOrder = ["person", "dog", "cat", "bicycle", "car", "bottle", "cup"];
-  let chosen = null;
-  for (const p of good) {
-    if (!chosen) chosen = p;
-    const pi = priorityOrder.indexOf(p.class);
-    const ci = priorityOrder.indexOf(chosen.class);
-    if (pi !== -1 && (ci === -1 || pi < ci)) chosen = p;
-  }
-
-  // se não houver escolha lógica, pega o primeiro
-  if (!chosen && good.length) chosen = good[0];
-  if (!chosen) return;
-
-  const label = chosen.class;
-  const lastForLabel = lastSpokeForLabel[label] || 0;
-  if (now - lastForLabel < detectionSettings.perLabelCooldown) {
-    // já falou recentemente dessa label -> evitar repetir
-    return;
-  }
-
-  // montar frase baseada no idioma
-  const lang = speechSettings.lang || "pt-BR";
-  let phrase = "";
-  if (lang.startsWith("pt")) {
-    const arr = LABEL_PHRASES_PT[label] || [ `Vejo um ${label}.` ];
-    phrase = arr[Math.floor(Math.random()*arr.length)];
-    // ajuste simples de gênero/forma para palavras específicas (garrafa -> "uma garrafa")
-    // já colocamos frases amigáveis em LABEL_PHRASES_PT
-  } else {
-    const arr = LABEL_PHRASES_EN[label] || [ `I see a ${label}.` ];
-    phrase = arr[Math.floor(Math.random()*arr.length)];
-  }
-
-  // incluir contexto espacial se houver múltiplos objetos e a caixa sugere "na mesa"?
-  // (opcional) — omitido por simplicidade, mas podemos inferir com heurísticas de borda.
-
-  // falar
-  speak(phrase);
-  lastGlobalSpeak = now;
-  lastSpokeForLabel[label] = now;
-
-  // atualiza região srLive
-  srLive && (srLive.innerText = phrase);
-}
-
-/* ----------------- cleanup ----------------- */
+/* ========================= CLEANUP ========================= */
 window.addEventListener("beforeunload", () => {
-  if (streamAtual) streamAtual.getTracks().forEach(t => t.stop());
+  try { if (streamAtual) streamAtual.getTracks().forEach(t => t.stop()); } catch(e){}
   if (rafId) cancelAnimationFrame(rafId);
 });
 
-
-/* Teste simples
-if ('speechSynthesis' in window) {
-  console.log('speechSynthesis OK');
-  console.log('voices (imediatas):', speechSynthesis.getVoices());
-  speechSynthesis.onvoiceschanged = () => {
-    console.log('voices changed event — voices agora:', speechSynthesis.getVoices());
-  };
-  const u = new SpeechSynthesisUtterance('Teste de fala. Se você ouvir isto, a síntese funciona.');
-  u.lang = 'pt-BR';
-  u.volume = 1;
-  u.rate = 1;
-  u.pitch = 1;
-  u.onstart = () => console.log('TTS: começou');
-  u.onend = () => console.log('TTS: terminou');
-  u.onerror = (e) => console.log('TTS erro', e);
-  speechSynthesis.speak(u);
-} else {
-  console.log('SpeechSynthesis não disponível neste navegador.');
-}*/
-// ===================== Unlock voice banner + robust warm-up =====================
+/* ========================= UNLOCK BANNER (for published site) ========================= */
 const enableVoiceBanner = document.getElementById('enableVoiceBanner');
+speechSynthesis.onvoiceschanged = () => { console.log('onvoiceschanged -> voices:', speechSynthesis.getVoices().map(v => v.lang + ' :: ' + v.name)); };
 
-// debug helper: log quando voices mudarem
-speechSynthesis.onvoiceschanged = () => {
-  console.log('onvoiceschanged -> voices:', speechSynthesis.getVoices().map(v => v.lang + ' :: ' + v.name));
-};
-
-// função que aguarda voices (poll + event fallback)
 async function waitForVoices(timeout = 3000) {
   const start = Date.now();
   let v = speechSynthesis.getVoices();
@@ -644,14 +453,8 @@ async function waitForVoices(timeout = 3000) {
   return await new Promise(resolve => {
     const check = () => {
       const got = speechSynthesis.getVoices();
-      if (got && got.length) {
-        resolve(got);
-        return;
-      }
-      if (Date.now() - start > timeout) {
-        resolve(got || []);
-        return;
-      }
+      if (got && got.length) { resolve(got); return; }
+      if (Date.now() - start > timeout) { resolve(got || []); return; }
       setTimeout(check, 200);
     };
     check();
@@ -660,51 +463,24 @@ async function waitForVoices(timeout = 3000) {
 
 async function enableVoiceNow() {
   try {
-    // garantir flag e salvar
     ttsEnabled = true;
     try { localStorage.setItem('tri_ttsEnabled', '1'); } catch(e){}
-
-    // chama warmUp (usa sua warmUpVoices se existir)
-    if (typeof warmUpVoices === 'function') {
-      await warmUpVoices().catch(()=>{});
-    } else {
-      // fallback simples: tenta carregar voices directly
-      await waitForVoices(2500);
-    }
-
-    // log das voices atuais
+    if (typeof warmUpVoices === 'function') { await warmUpVoices().catch(()=>{}); } else { await waitForVoices(2500); }
     console.log('voices after enable:', speechSynthesis.getVoices());
-
-    // teste de fala
-    try {
-      await speak('Voz ativada. Vou avisar o que eu detectar.');
-      console.log('speak() chamado para teste.');
-    } catch(e) {
-      console.warn('Erro ao tentar speak() no teste:', e);
-    }
-
-    // remover banner
+    try { await speak('Voz ativada. Vou avisar o que eu detectar.'); console.log('speak() chamado para teste.'); } catch(e){ console.warn('Erro speak test', e); }
     if (enableVoiceBanner && enableVoiceBanner.parentNode) enableVoiceBanner.remove();
-  } catch (err) {
-    console.error('enableVoiceNow erro', err);
-  }
+  } catch (err) { console.error('enableVoiceNow erro', err); }
 }
 
 if (enableVoiceBanner) {
-  // só mostrar se não for já ativado
-  try {
-    if (localStorage.getItem('tri_ttsEnabled') === '1') {
-      enableVoiceBanner.remove();
-    }
-  } catch(e){}
-
-  enableVoiceBanner.addEventListener('click', async () => {
-    await enableVoiceNow();
-  }, { once: true, passive: true });
+  try { if (localStorage.getItem('tri_ttsEnabled') === '1') enableVoiceBanner.remove(); } catch(e){}
+  enableVoiceBanner.addEventListener('click', async () => { await enableVoiceNow(); }, { once: true, passive: true });
 }
 
-// redundância: também ligar warmUp ao primeiro clique em qualquer lugar
+// redundancy: also run warmUp on first click anywhere
 document.addEventListener('click', function _firstClickHandler() {
   try { if (typeof warmUpVoices === 'function') warmUpVoices().catch(()=>{}); } catch(e){}
   document.removeEventListener('click', _firstClickHandler, { capture: false });
 }, { capture: false });
+
+/* ========================= END OF FILE ========================= */
