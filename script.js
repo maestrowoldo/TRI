@@ -518,6 +518,7 @@ window.addEventListener("beforeunload", () => {
   if (rafId) cancelAnimationFrame(rafId);
 });
 
+
 /* Teste simples
 if ('speechSynthesis' in window) {
   console.log('speechSynthesis OK');
@@ -537,3 +538,83 @@ if ('speechSynthesis' in window) {
 } else {
   console.log('SpeechSynthesis não disponível neste navegador.');
 }*/
+// ===================== Unlock voice banner + robust warm-up =====================
+const enableVoiceBanner = document.getElementById('enableVoiceBanner');
+
+// debug helper: log quando voices mudarem
+speechSynthesis.onvoiceschanged = () => {
+  console.log('onvoiceschanged -> voices:', speechSynthesis.getVoices().map(v => v.lang + ' :: ' + v.name));
+};
+
+// função que aguarda voices (poll + event fallback)
+async function waitForVoices(timeout = 3000) {
+  const start = Date.now();
+  let v = speechSynthesis.getVoices();
+  if (v && v.length) return v;
+  return await new Promise(resolve => {
+    const check = () => {
+      const got = speechSynthesis.getVoices();
+      if (got && got.length) {
+        resolve(got);
+        return;
+      }
+      if (Date.now() - start > timeout) {
+        resolve(got || []);
+        return;
+      }
+      setTimeout(check, 200);
+    };
+    check();
+  });
+}
+
+async function enableVoiceNow() {
+  try {
+    // garantir flag e salvar
+    ttsEnabled = true;
+    try { localStorage.setItem('tri_ttsEnabled', '1'); } catch(e){}
+
+    // chama warmUp (usa sua warmUpVoices se existir)
+    if (typeof warmUpVoices === 'function') {
+      await warmUpVoices().catch(()=>{});
+    } else {
+      // fallback simples: tenta carregar voices directly
+      await waitForVoices(2500);
+    }
+
+    // log das voices atuais
+    console.log('voices after enable:', speechSynthesis.getVoices());
+
+    // teste de fala
+    try {
+      await speak('Voz ativada. Vou avisar o que eu detectar.');
+      console.log('speak() chamado para teste.');
+    } catch(e) {
+      console.warn('Erro ao tentar speak() no teste:', e);
+    }
+
+    // remover banner
+    if (enableVoiceBanner && enableVoiceBanner.parentNode) enableVoiceBanner.remove();
+  } catch (err) {
+    console.error('enableVoiceNow erro', err);
+  }
+}
+
+if (enableVoiceBanner) {
+  // só mostrar se não for já ativado
+  try {
+    if (localStorage.getItem('tri_ttsEnabled') === '1') {
+      enableVoiceBanner.remove();
+    }
+  } catch(e){}
+
+  enableVoiceBanner.addEventListener('click', async () => {
+    await enableVoiceNow();
+  }, { once: true, passive: true });
+}
+
+// redundância: também ligar warmUp ao primeiro clique em qualquer lugar
+document.addEventListener('click', function _firstClickHandler() {
+  try { if (typeof warmUpVoices === 'function') warmUpVoices().catch(()=>{}); } catch(e){}
+  document.removeEventListener('click', _firstClickHandler, { capture: false });
+}, { capture: false });
