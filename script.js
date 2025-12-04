@@ -269,6 +269,8 @@ function attachWarmUpOnUserGesture() {
   };
   document.addEventListener('click', gestureHandler, { capture: true });
   document.addEventListener('touchstart', gestureHandler, { capture: true });
+  document.addEventListener('click', () => { try { warmUpVoices(); } catch(e){} }, { once: true });
+
 }
 // executar agora para garantir escuta do primeiro gesto
 attachWarmUpOnUserGesture();
