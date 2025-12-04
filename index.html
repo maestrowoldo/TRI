@@ -13,13 +13,15 @@
 
   <!-- Splash Screen (3 segundos) -->
   <div id="splash" class="splash-screen">
-    <img src="splash.png" alt="TRI Logo" class="splash-img-full">
+    <img src="public/splash.png" alt="TRI Logo" class="splash-img-full">
   </div>
 
   <!-- Wrapper principal -->
   <div class="camera-wrapper" id="app">
 
-    <video id="video" autoplay playsinline></video>
+    <video id="video" autoplay playsinline muted></video>
+    <!-- canvas para desenhar caixas -->
+    <canvas id="overlay"></canvas>
 
     <!-- Top Bar -->
     <div class="top-bar">
@@ -35,26 +37,25 @@
       </svg>
     </div>
 
-    <!-- Transcrição -->
+    <!-- Transcrição / status -->
     <div class="transcricao" id="transcricao">
-      Transcrição em tempo real aparecerá aqui...
+      Carregando modelo...
     </div>
 
     <!-- Bottom Bar -->
-<div class="bottom-bar">
+    <div class="bottom-bar">
 
-  <!-- Botão Ajuda -->
+      <!-- Botão Ajuda -->
       <div id="helpSecondary" class="small-btn">
         <i class="bi bi-question-circle bottom-icon"></i>
       </div>
 
-      <!-- Botão Capturar -->
-      <button id="captureBtn" class="circle-btn"></button>
+      <!-- Botão Capturar (também faz snapshot) -->
+      <button id="captureBtn" class="circle-btn" title="Capturar / salvar imagem"></button>
 
       <!-- Alternar Câmera -->
-      <div id="toggleCamera" class="small-btn">
+      <div id="toggleCamera" class="small-btn" title="Alternar câmera">
         <i class="bi bi-arrow-repeat bottom-icon"></i>
-
       </div>
 
     </div>
@@ -76,6 +77,11 @@
     </div>
   </div>
 
+  <!-- TensorFlow.js e coco-ssd via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+
+  <!-- seu script principal -->
   <script src="script.js"></script>
 </body>
 </html>
