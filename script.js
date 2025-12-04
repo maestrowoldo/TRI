@@ -11,6 +11,59 @@ window.onload = () => {
   }, 1200);
 };
 
+// ===== Menu de três pontos: abrir/fechar com acessibilidade =====
+const menuToggle = document.getElementById("menuToggle");
+const menuPanel = document.getElementById("menuPanel");
+const closeMenuBtn = document.getElementById("closeMenu");
+
+function setMenuOpen(open) {
+  if (!menuPanel || !menuToggle) return;
+  menuPanel.setAttribute("aria-hidden", String(!open));
+  menuToggle.setAttribute("aria-expanded", String(open));
+  if (open) {
+    const first = menuPanel.querySelector("button, [tabindex]:not([tabindex='-1'])");
+    if (first) first.focus();
+  } else {
+    menuToggle.focus();
+  }
+}
+
+menuToggle?.addEventListener("click", (e) => {
+  const isOpen = menuPanel?.getAttribute("aria-hidden") === "false";
+  setMenuOpen(!isOpen);
+});
+
+document.addEventListener("click", (e) => {
+  if (!menuPanel || !menuToggle) return;
+  if (menuPanel.getAttribute("aria-hidden") === "false") {
+    const target = e.target;
+    if (!menuPanel.contains(target) && !menuToggle.contains(target)) {
+      setMenuOpen(false);
+    }
+  }
+}, { capture: true });
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (menuPanel && menuPanel.getAttribute("aria-hidden") === "false") {
+      setMenuOpen(false);
+    }
+  }
+});
+
+closeMenuBtn?.addEventListener("click", () => setMenuOpen(false));
+
+
+// ----------- AJUDA (MODAL) -------------
+const helpBtn = document.getElementById("helpBtn");
+const helpModal = document.getElementById("helpModal");
+const closeHelp = document.getElementById("closeHelp");
+const helpSecondary = document.getElementById("helpSecondary");
+
+helpBtn.onclick = () => helpModal.style.display = "flex";
+helpSecondary.onclick = () => helpModal.style.display = "flex";
+closeHelp.onclick = () => helpModal.style.display = "none";
+
 /* ----------------- CONTROLES / ARIA ----------------- */
 const ttsToggle = document.getElementById("ttsToggle");
 const pauseBtn = document.getElementById("pauseBtn");

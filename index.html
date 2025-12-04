@@ -27,14 +27,52 @@
     <div class="top-bar">
 
       <!-- Ícone de ajuda -->
-      <i id="helpBtn" class="fi fi-sr-question-square help-icon"></i>
+      <i id="helpBtn" class="fi fi-sr-question-square help-icon" title="Ajuda"></i>
 
       <!-- Ícone de menu (3 pontos) -->
-      <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-        <circle cx="5" cy="12" r="2"/>
-        <circle cx="12" cy="12" r="2"/>
-        <circle cx="19" cy="12" r="2"/>
-      </svg>
+      <button id="menuToggle" class="menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="menuPanel" title="Abrir menu">
+          <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <circle cx="5" cy="12" r="2"/>
+            <circle cx="12" cy="12" r="2"/>
+            <circle cx="19" cy="12" r="2"/>
+          </svg>
+      </button>
+    </div>
+    <!-- PAINEL DO MENU: só com CONTROLES DE ACESSIBILIDADE -->
+    <div id="menuPanel" class="menu-panel" role="dialog" aria-label="Controles de acessibilidade" aria-hidden="true">
+      <div class="menu-panel-inner" role="document">
+
+        <h3 style="margin:0 0 8px 0;font-size:16px;">Acessibilidade</h3>
+
+        <div class="menu-access">
+          <button id="ttsToggle" class="menu-btn" aria-pressed="true" title="Ativar/Desativar voz">🔊 Ativar voz</button>
+          <button id="pauseBtn" class="menu-btn" title="Pausar/Retomar detecção">⏸/▶️ Pausar</button>
+
+          <label class="menu-label">Volume
+            <input id="volumeRange" type="range" min="0" max="1" step="0.05" value="0.9" />
+          </label>
+
+          <label class="menu-label">Velocidade
+            <input id="rateRange" type="range" min="0.6" max="1.6" step="0.1" value="1.0" />
+          </label>
+
+          <label class="menu-label">Sensibilidade
+            <input id="thresholdRange" type="range" min="0.3" max="0.9" step="0.05" value="0.55" />
+          </label>
+
+          <label class="menu-label">Idioma
+            <select id="langSelect" aria-label="Idioma da fala">
+              <option value="pt-BR" selected>Português (Brasil)</option>
+              <option value="en-US">English (US)</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="menu-foot" style="margin-top:10px;">
+          <button id="closeMenu" class="menu-close">Fechar</button>
+        </div>
+
+      </div>
     </div>
 
     <!-- Transcrição / status -->
@@ -44,29 +82,7 @@
 
     <!-- Bottom Bar -->
     <div class="bottom-bar">
-      <!-- CONTROLES DE ACESSIBILIDADE (coloque na bottom-bar) -->
-      <div class="access-controls" role="region" aria-label="Controles de acessibilidade">
-        <button id="ttsToggle" class="small-btn" aria-pressed="true" title="Ativar/Desativar voz">🔊 Falar</button>
-        <button id="pauseBtn" class="small-btn" title="Pausar/Retomar detecção">⏸/▶️</button>
-
-        <label for="volumeRange" class="sr-only">Volume</label>
-        <input id="volumeRange" type="range" min="0" max="1" step="0.05" value="0.9" aria-label="Volume da voz">
-
-        <label for="rateRange" class="sr-only">Velocidade</label>
-        <input id="rateRange" type="range" min="0.6" max="1.6" step="0.1" value="1.0" aria-label="Velocidade da voz">
-
-        <label for="thresholdRange" class="sr-only">Sensibilidade</label>
-        <input id="thresholdRange" type="range" min="0.3" max="0.9" step="0.05" value="0.55" aria-label="Confiança mínima para falar">
-
-        <select id="langSelect" aria-label="Idioma da fala">
-          <option value="pt-BR" selected>Português (Brasil)</option>
-          <option value="en-US">English (US)</option>
-        </select>
-      </div>
-
-      <!-- region para leitores de tela (aria-live) -->
-      <div id="srLive" aria-live="polite" aria-atomic="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">
-      </div>
+      
       <!-- Botão Ajuda -->
       <div id="helpSecondary" class="small-btn">
         <i class="bi bi-question-circle bottom-icon"></i>
@@ -98,6 +114,8 @@
       <button id="closeHelp" class="close-help">Fechar</button>
     </div>
   </div>
+  <!-- region para leitores de tela (aria-live) -->
+  <div id="srLive" aria-live="polite" aria-atomic="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;"></div>
 
   <!-- TensorFlow.js e coco-ssd via CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
