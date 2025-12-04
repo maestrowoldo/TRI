@@ -80,7 +80,23 @@ ttsToggle?.addEventListener("click", () => {
   ttsEnabled = !ttsEnabled;
   ttsToggle.innerText = ttsEnabled ? "🔊 Falar" : "🔈 Mudo";
   ttsToggle.setAttribute("aria-pressed", String(ttsEnabled));
+   console.log('TTS toggled. now ttsEnabled=', ttsEnabled);
+
+   try { localStorage.setItem('tri_ttsEnabled', ttsEnabled ? '1' : '0'); } catch(e){}
 });
+
+// ler preferência ao carregar
+try {
+  const saved = localStorage.getItem('tri_ttsEnabled');
+  if (saved !== null) {
+    ttsEnabled = saved === '1';
+    if (ttsToggle) {
+      ttsToggle.innerText = ttsEnabled ? "🔊 Falar" : "🔈 Mudo";
+      ttsToggle.setAttribute("aria-pressed", String(ttsEnabled));
+    }
+  }
+} catch(e){}
+
 
 pauseBtn?.addEventListener("click", () => {
   paused = !paused;
@@ -119,47 +135,148 @@ langSelect?.addEventListener("change", () => {
 });
 
 /* ----------------- TTS helpers ----------------- */
-function availableVoices() {
-  return new Promise(resolve => {
-    const voices = speechSynthesis.getVoices();
-    if (voices.length) return resolve(voices);
-    // espera evento
-    speechSynthesis.onvoiceschanged = () => resolve(speechSynthesis.getVoices());
-    // fallback timeout
-    setTimeout(() => resolve(speechSynthesis.getVoices()), 1500);
+// ----------------- TTS robusto + warm-up (cole/replace aqui) -----------------
+let _voicesReady = false;
+let _didWarmUp = false;
+
+// beep fallback (data URI curto) — você pode ajustar
+const beep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=");
+
+// Tenta obter vozes, esperando evento voiceschanged (fallback timeout)
+async function getVoicesOnce(timeout = 1800) {
+  if (!('speechSynthesis' in window)) return [];
+  const cached = speechSynthesis.getVoices();
+  if (cached && cached.length) {
+    _voicesReady = true;
+    return cached;
+  }
+  return await new Promise(resolve => {
+    let done = false;
+    const handler = () => {
+      if (done) return;
+      done = true;
+      _voicesReady = true;
+      resolve(speechSynthesis.getVoices());
+    };
+    speechSynthesis.onvoiceschanged = handler;
+    setTimeout(() => {
+      if (done) return;
+      done = true;
+      _voicesReady = !!(speechSynthesis.getVoices().length);
+      resolve(speechSynthesis.getVoices());
+    }, timeout);
   });
 }
 
-async function speak(text, opts = {}) {
-  if (!ttsEnabled) return;
-  if (!("speechSynthesis" in globalThis)) {
-    console.warn("TTS não disponível neste navegador.");
-    return;
-  }
-  const { lang, volume, rate, pitch } = { ...speechSettings, ...opts };
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = lang;
-  utter.volume = volume;
-  utter.rate = rate;
-  utter.pitch = pitch;
-
-  // escolher voz que combine com idioma (preferir pt-BR)
+// Warm-up: chamar em resposta a um gesto do usuário (click no menu, capture, etc.)
+async function warmUpVoices() {
+  if (_didWarmUp) return;
+  _didWarmUp = true;
   try {
-    const voices = await availableVoices();
-    const prefer = voices.find(v => v.lang?.toLowerCase().startsWith(lang.toLowerCase()));
-    if (prefer) utter.voice = prefer;
+    const v = await getVoicesOnce(2000);
+    console.log('warmUpVoices -> voices count =', v.length, v.map(vi => vi.lang + ' :: ' + vi.name));
   } catch (e) {
-    console.warn("Erro ao selecionar voz:", e);
-  }
-
-  // fala
-  try {
-    speechSynthesis.cancel(); // evita sobreposição
-    speechSynthesis.speak(utter);
-  } catch (e) {
-    console.error("Erro TTS:", e);
+    console.warn('warmUpVoices erro', e);
   }
 }
+
+// fallback sonoro simples
+function playBeep() {
+  try {
+    beep.volume = Math.min(1, (speechSettings && speechSettings.volume) ? speechSettings.volume : 1);
+    beep.currentTime = 0;
+    beep.play().catch(err => console.warn('beep play blocked', err));
+  } catch (e) {}
+}
+
+// Função speak mais robusta
+async function speak(text, opts = {}) {
+  console.log('speak() chamado com:', text);
+
+  // checa se TTS está habilitado por configuração da sua app
+  if (typeof ttsEnabled !== 'undefined' && !ttsEnabled) {
+    console.log('TTS desabilitado (ttsEnabled=false).');
+    return false;
+  }
+
+  if (!('speechSynthesis' in window)) {
+    console.warn('SpeechSynthesis não disponível no navegador — usando beep fallback.');
+    playBeep();
+    return false;
+  }
+
+  // garantia: se não houve interação do usuário, algumas plataformas bloqueiam vozes.
+  // warmUpVoices deve ter sido chamado após um gesto do usuário (ver listener abaixo).
+  if (!_didWarmUp) {
+    console.log('warmUp não executado ainda; tentando agora antes de falar.');
+    await warmUpVoices();
+  }
+
+  try {
+    const voices = await getVoicesOnce(1500);
+    const settings = { ...speechSettings, ...opts };
+
+    // monta utterance
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = settings.lang || 'pt-BR';
+    u.volume = typeof settings.volume === 'number' ? settings.volume : 1;
+    u.rate = typeof settings.rate === 'number' ? settings.rate : 1;
+    u.pitch = typeof settings.pitch === 'number' ? settings.pitch : 1;
+
+    // seleciona voz preferida (match no começo da tag lang)
+    if (voices && voices.length) {
+      const prefer = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(u.lang.toLowerCase()));
+      if (prefer) {
+        u.voice = prefer;
+        console.log('speak -> usando voz preferida:', prefer.name, prefer.lang);
+      } else {
+        u.voice = voices[0];
+        console.log('speak -> usando voz fallback:', voices[0].name, voices[0].lang);
+      }
+    } else {
+      console.warn('Nenhuma voice disponível; fallback para beep antes de tentar falar.');
+      // tocar beep curto para sinalizar tentativa
+      playBeep();
+      // ainda assim tentamos falar (pode falhar silenciosamente)
+    }
+
+    u.onstart = () => console.log('TTS onstart');
+    u.onend = () => console.log('TTS onend');
+    u.onerror = (e) => console.error('TTS onerror', e);
+
+    // NÃO chame speechSynthesis.cancel() aqui — browsers podem bloquear se usado incorretamente.
+    // Se você quiser cancelar fala anterior, faça isso com lógica específica (ex: ao pausar/stop).
+
+    speechSynthesis.speak(u);
+    return true;
+  } catch (err) {
+    console.error('Erro em speak():', err);
+    // fallback auditivo
+    playBeep();
+    return false;
+  }
+}
+
+// ----------------- Garantir warm-up em interação do usuário -----------------
+// Chamar warmUpVoices() em gestos comuns: clique no menu, botão capturar, ou primeiro toque no body.
+function attachWarmUpOnUserGesture() {
+  if (typeof window === 'undefined') return;
+  const gestureHandler = (e) => {
+    warmUpVoices().catch(() => {});
+    // remove os listeners após primeiro gesto
+    document.removeEventListener('click', gestureHandler, { capture: true });
+    document.removeEventListener('touchstart', gestureHandler, { capture: true });
+  };
+  document.addEventListener('click', gestureHandler, { capture: true });
+  document.addEventListener('touchstart', gestureHandler, { capture: true });
+}
+// executar agora para garantir escuta do primeiro gesto
+attachWarmUpOnUserGesture();
+
+// exemplo: também ligar ao abrir do menu (se já tiver menuToggle)
+menuToggle?.addEventListener('click', () => { warmUpVoices().catch(()=>{}); });
+captureBtn?.addEventListener('click', () => { warmUpVoices().catch(()=>{}); });
+
 
 /* ----------------- Frases amigáveis por classe ----------------- */
 const LABEL_PHRASES_PT = {
