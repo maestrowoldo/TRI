@@ -1,7 +1,10 @@
-// script.js — Detector com TTS (PT-BR) — Versão revisada
-// Requisitos: index.html deve conter elementos com IDs usados abaixo (video, overlay, splash, app, etc.)
+// script.js — Detector com TTS, tracking, posição/distância, vibração, OCR hook
+// Substitua seu script.js atual por este. HTML e CSS permanecem os mesmos.
+// Expectativa: IDs opcionais no HTML: splash, app, video, overlay, transcricao, captureBtn, toggleCamera,
+// menuToggle, menuPanel, closeMenu, ttsToggle, pauseBtn, volumeRange, rateRange, thresholdRange, langSelect,
+// srLive, enableVoiceBanner, descriptionMode, voicePreset, ocrBtn, toggleContrast
 
-/* ========================= INIT & UI ========================= */
+/* ========================= BOOT / UI INIT ========================= */
 window.onload = () => {
   setTimeout(() => {
     const splash = document.getElementById("splash");
@@ -12,22 +15,30 @@ window.onload = () => {
   }, 1200);
 };
 
-// Top / menu controls (may be null if DOM order different)
+/* ========================= ELEMENT REFERENCES ========================= */
 const menuToggle = document.getElementById("menuToggle");
 const menuPanel = document.getElementById("menuPanel");
 const closeMenuBtn = document.getElementById("closeMenu");
 
-// Help modal controls
 const helpBtn = document.getElementById("helpBtn");
 const helpModal = document.getElementById("helpModal");
 const closeHelp = document.getElementById("closeHelp");
 const helpSecondary = document.getElementById("helpSecondary");
 
+const ttsToggle = document.getElementById("ttsToggle");
+const pauseBtn = document.getElementById("pauseBtn");
+const volumeRange = document.getElementById("volumeRange");
+const rateRange = document.getElementById("rateRange");
+const thresholdRange = document.getElementById("thresholdRange");
+const langSelect = document.getElementById("langSelect");
+const srLive = document.getElementById("srLive");
+const captureBtn = document.getElementById("captureBtn");
+
+/* ========================= SIMPLE UI BEHAVIOR ========================= */
 helpBtn?.addEventListener("click", () => { if (helpModal) helpModal.style.display = "flex"; });
 helpSecondary?.addEventListener("click", () => { if (helpModal) helpModal.style.display = "flex"; });
 closeHelp?.addEventListener("click", () => { if (helpModal) helpModal.style.display = "none"; });
 
-// Menu open/close (keeps UI clean)
 function setMenuOpen(open) {
   if (!menuPanel || !menuToggle) return;
   menuPanel.setAttribute("aria-hidden", String(!open));
@@ -39,10 +50,7 @@ function setMenuOpen(open) {
     menuToggle.focus();
   }
 }
-menuToggle?.addEventListener("click", () => {
-  const isOpen = menuPanel?.getAttribute("aria-hidden") === "false";
-  setMenuOpen(!isOpen);
-});
+menuToggle?.addEventListener("click", () => { const isOpen = menuPanel?.getAttribute("aria-hidden") === "false"; setMenuOpen(!isOpen); });
 document.addEventListener("click", (e) => {
   if (!menuPanel || !menuToggle) return;
   if (menuPanel.getAttribute("aria-hidden") === "false") {
@@ -53,25 +61,16 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenuOpen(false); });
 closeMenuBtn?.addEventListener("click", () => setMenuOpen(false));
 
-/* ========================= CONTROLS & STATE ========================= */
-const ttsToggle = document.getElementById("ttsToggle");
-const pauseBtn = document.getElementById("pauseBtn");
-const volumeRange = document.getElementById("volumeRange");
-const rateRange = document.getElementById("rateRange");
-const thresholdRange = document.getElementById("thresholdRange");
-const langSelect = document.getElementById("langSelect");
-const srLive = document.getElementById("srLive");
-
+/* ========================= STATE & CONTROLS ========================= */
 let ttsEnabled = true;
 let paused = false;
 
-// init ttsEnabled from localStorage
+// try to read saved preference
 try {
   const saved = localStorage.getItem('tri_ttsEnabled');
   if (saved !== null) ttsEnabled = saved === '1';
-} catch (e) { /* ignore */ }
+} catch(e){}
 
-// sync UI if buttons exist
 if (ttsToggle) { ttsToggle.innerText = ttsEnabled ? "🔊 Falar" : "🔈 Mudo"; ttsToggle.setAttribute("aria-pressed", String(ttsEnabled)); }
 ttsToggle?.addEventListener("click", () => {
   ttsEnabled = !ttsEnabled;
@@ -114,7 +113,7 @@ let _didWarmUp = false;
 // beep fallback
 const beep = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=");
 
-// get voices once (waits for voiceschanged with timeout)
+// get voices once
 async function getVoicesOnce(timeout = 1800) {
   if (!('speechSynthesis' in window)) return [];
   const cached = speechSynthesis.getVoices();
@@ -193,7 +192,7 @@ async function speak(text, opts = {}) {
   }
 }
 
-// attach warm-up to first user gesture (robust)
+/* attach warm-up to first gesture */
 function attachWarmUpOnUserGesture() {
   if (typeof window === 'undefined') return;
   const gestureHandler = (e) => {
@@ -203,7 +202,6 @@ function attachWarmUpOnUserGesture() {
   };
   document.addEventListener('click', gestureHandler, { capture: true });
   document.addEventListener('touchstart', gestureHandler, { capture: true });
-  // redundancy: also run once non-capture
   document.addEventListener('click', function _oneClick() {
     try { warmUpVoices().catch(()=>{}); } catch(e){}
     document.removeEventListener('click', _oneClick, { capture: false });
@@ -211,8 +209,7 @@ function attachWarmUpOnUserGesture() {
 }
 attachWarmUpOnUserGesture();
 
-/* ========================= LABELS & ANNOUNCE ========================= */
-// expanded phrases + aliases
+/* ========================= LABELS / ALIASES ========================= */
 const LABEL_PHRASES_PT = {
   person: ["Vejo uma pessoa.", "Há alguém aqui."],
   bottle: ["Vejo uma garrafa.", "Há uma garrafa na superfície."],
@@ -239,51 +236,144 @@ const LABEL_ALIASES = {
   "tvmonitor": "tv"
 };
 
-// set false in production (true forces speak ignoring cooldowns)
+/* DEBUG (false em produção) */
 const DEBUG_FORCE_SPEAK = false;
 
-// announcement tracking
+/* ========================= TRACKING & SPATIAL ========================= */
+const TRACKING_IOU_THRESHOLD = 0.3;
+const CONFIRM_FRAMES = 2;
+const UNCONFIRM_FRAMES = 3;
+const DISTANCE_AREAS = { near: 0.15, medium: 0.03 };
+
+let tracks = {};
+let nextTrackId = 1;
+
+function iou(boxA, boxB) {
+  const [ax, ay, aw, ah] = boxA;
+  const [bx, by, bw, bh] = boxB;
+  const ax2 = ax + aw, ay2 = ay + ah;
+  const bx2 = bx + bw, by2 = by + bh;
+  const interLeft = Math.max(ax, bx);
+  const interTop = Math.max(ay, by);
+  const interRight = Math.min(ax2, bx2);
+  const interBottom = Math.min(ay2, by2);
+  const interW = Math.max(0, interRight - interLeft);
+  const interH = Math.max(0, interBottom - interTop);
+  const interArea = interW * interH;
+  const areaA = aw * ah;
+  const areaB = bw * bh;
+  const union = areaA + areaB - interArea;
+  return union === 0 ? 0 : interArea / union;
+}
+
+function normalizeLabelSimple(label) {
+  if (!label) return label;
+  return LABEL_ALIASES[label] || label;
+}
+
+function inferPositionAndDistance(bbox, frameWidth, frameHeight) {
+  const cx = bbox[0] + bbox[2] / 2;
+  const areaRatio = (bbox[2] * bbox[3]) / (frameWidth * frameHeight);
+  const third = frameWidth / 3;
+  const horizontal = cx < third ? 'à esquerda' : (cx > 2*third ? 'à direita' : 'no centro');
+  let distance = 'longe';
+  if (areaRatio >= DISTANCE_AREAS.near) distance = 'perto';
+  else if (areaRatio >= DISTANCE_AREAS.medium) distance = 'média distância';
+  return { horizontal, distance, areaRatio };
+}
+
+const VIBRATION_PATTERNS = {
+  person: [30, 60, 30],
+  car: [80, 40, 80],
+  default: [20]
+};
+
+function vibrateForLabel(label) {
+  try {
+    if (!('vibrate' in navigator)) return;
+    const normalized = normalizeLabelSimple(label);
+    const pattern = VIBRATION_PATTERNS[normalized] || VIBRATION_PATTERNS.default;
+    navigator.vibrate(pattern);
+  } catch(e) {}
+}
+
+function updateTracks(predictions) {
+  // mark unmatched initially
+  Object.values(tracks).forEach(t => { t.matched = false; });
+
+  for (const p of predictions) {
+    let bestTrack = null;
+    let bestIou = 0;
+    for (const id in tracks) {
+      const t = tracks[id];
+      if (t.label !== p.class) continue;
+      const score = iou(t.bbox, p.bbox);
+      if (score > bestIou) { bestIou = score; bestTrack = t; }
+    }
+    if (bestTrack && bestIou >= TRACKING_IOU_THRESHOLD) {
+      bestTrack.bbox = p.bbox;
+      bestTrack.lastSeen = Date.now();
+      bestTrack.seenCount = (bestTrack.seenCount || 0) + 1;
+      bestTrack.lostCount = 0;
+      bestTrack.score = p.score;
+      bestTrack.matched = true;
+      bestTrack.lastPred = p;
+    } else {
+      const id = String(nextTrackId++);
+      tracks[id] = { id, label: p.class, bbox: p.bbox, lastSeen: Date.now(), seenCount: 1, lostCount: 0, score: p.score, matched: true, lastPred: p, confirmed: false };
+    }
+  }
+
+  for (const id in tracks) {
+    const t = tracks[id];
+    if (!t.matched) t.lostCount = (t.lostCount || 0) + 1;
+    if (!t.confirmed && (t.seenCount >= CONFIRM_FRAMES)) t.confirmed = true;
+  }
+
+  for (const id in tracks) {
+    if (tracks[id].lostCount >= UNCONFIRM_FRAMES) delete tracks[id];
+  }
+}
+
+function getConfirmedTracks() {
+  return Object.values(tracks).filter(t => t.confirmed);
+}
+
+function formatPhrase(label, positionInfo, score, mode='short') {
+  const basePt = LABEL_PHRASES_PT[label] ? LABEL_PHRASES_PT[label][0] : `Vejo um ${label}`;
+  if (mode === 'short') return `${basePt} ${positionInfo.horizontal}.`;
+  const confidence = Math.round((score || 0) * 100);
+  return `${basePt} ${positionInfo.horizontal}, ${positionInfo.distance} — confiança ${confidence} por cento.`;
+}
+
+/* ========================= ANNOUNCER (UTILIZA O TRACKING) ========================= */
 let lastGlobalSpeak = 0;
 const lastSpokeForLabel = {};
 
-// normalize helper
-function normalizeLabel(label) {
-  if (!label) return label;
-  if (LABEL_ALIASES[label]) return LABEL_ALIASES[label];
-  return label;
-}
-
-// single authoritative handleAnnouncements (keeps logic consistent)
 function handleAnnouncements(predictions) {
   console.log('handleAnnouncements chamado. ttsEnabled=', ttsEnabled, 'predictions=', predictions && predictions.length);
   if (typeof ttsEnabled !== 'undefined' && !ttsEnabled) { console.log('TTS disabled'); return; }
-
   const now = Date.now();
   if (!DEBUG_FORCE_SPEAK && (now - lastGlobalSpeak < detectionSettings.globalCooldown)) { console.log('skip globalCooldown'); return; }
 
   const good = (predictions || []).filter(p => p.score >= detectionSettings.minScore);
   if (!good.length) { console.log('no good predictions'); return; }
 
-  good.sort((a,b) => b.score - a.score);
-  const priorityOrder = ["person", "dog", "cat", "bicycle", "car", "bottle", "cup"];
-  let chosen = good[0];
-  for (const p of good) {
-    const pi = priorityOrder.indexOf(p.class);
-    const ci = priorityOrder.indexOf(chosen.class);
-    if (pi !== -1 && (ci === -1 || pi < ci)) chosen = p;
-  }
+  updateTracks(good);
+  const confirmed = getConfirmedTracks();
+  if (!confirmed.length) return;
 
-  let label = normalizeLabel(chosen.class);
-  let phrase = null;
-  if (speechSettings.lang && speechSettings.lang.startsWith('pt')) {
-    const arr = LABEL_PHRASES_PT[label] || LABEL_PHRASES_PT[label.toLowerCase()] || null;
-    phrase = arr ? arr[Math.floor(Math.random()*arr.length)] : `Vejo um ${label}.`;
-  } else {
-    const arr = LABEL_PHRASES_EN[label] || null;
-    phrase = arr ? arr[Math.floor(Math.random()*arr.length)] : `I see a ${label}.`;
-  }
+  confirmed.sort((a,b) => (b.score || 0) - (a.score || 0));
+  const chosen = confirmed[0];
+  const label = normalizeLabelSimple(chosen.label);
 
-  console.log('announcement: chosen=', chosen, 'label=', label, 'phrase=', phrase, 'score=', chosen.score);
+  const frameWidth = (video && video.videoWidth) || (canvas && canvas.width) || 640;
+  const frameHeight = (video && video.videoHeight) || (canvas && canvas.height) || 360;
+  const positionInfo = inferPositionAndDistance(chosen.bbox, frameWidth, frameHeight);
+
+  const modeEl = document.getElementById('descriptionMode');
+  const mode = (modeEl && modeEl.value) ? modeEl.value : 'short';
+  const phrase = formatPhrase(label, positionInfo, chosen.score, mode);
 
   const lastForLabel = lastSpokeForLabel[label] || 0;
   if (!DEBUG_FORCE_SPEAK && (now - lastForLabel < detectionSettings.perLabelCooldown)) {
@@ -291,12 +381,14 @@ function handleAnnouncements(predictions) {
   }
 
   const didSpeak = speak(phrase);
-  console.log('didSpeak=', didSpeak);
+  console.log('didSpeak=', didSpeak, 'phrase=', phrase);
 
-  lastGlobalSpeak = now;
-  lastSpokeForLabel[label] = now;
+  vibrateForLabel(label);
 
-  srLive && (srLive.innerText = phrase);
+  lastGlobalSpeak = Date.now();
+  lastSpokeForLabel[label] = Date.now();
+
+  if (srLive) srLive.innerText = phrase;
 }
 
 /* ========================= CAMERA / MODEL / CANVAS ========================= */
@@ -310,7 +402,6 @@ const video = document.getElementById("video");
 const canvas = document.getElementById("overlay");
 const ctx = canvas ? canvas.getContext("2d") : null;
 const transcricao = document.getElementById("transcricao");
-const captureBtn = document.getElementById("captureBtn");
 
 // load model
 async function carregarModelo() {
@@ -354,13 +445,11 @@ function resizeCanvas() {
   canvas.style.height = "100%";
 }
 
-// toggle camera
 document.getElementById("toggleCamera")?.addEventListener("click", async () => {
   usandoCameraFrontal = !usandoCameraFrontal;
   await iniciarCamera();
 });
 
-// capture snapshot
 captureBtn?.addEventListener("click", () => {
   if (!video) return;
   const tmp = document.createElement("canvas");
@@ -378,7 +467,10 @@ captureBtn?.addEventListener("click", () => {
   a.remove();
 });
 
-/* ========================= DETECTION LOOP ========================= */
+/* ========================= DETECTION LOOP (with optional frame skip) ========================= */
+let frameCounter = 0;
+const FRAME_SKIP = 1; // increase to 2 or 3 to save CPU
+
 async function startDetectionLoop() {
   if (model == null || !video || video.readyState < 2) { setTimeout(startDetectionLoop, 300); return; }
   if (detectando) return;
@@ -388,9 +480,12 @@ async function startDetectionLoop() {
     if (paused) { rafId = requestAnimationFrame(detectFrame); return; }
     try {
       resizeCanvas();
-      const predictions = await model.detect(video);
-      drawPredictions(predictions);
-      handleAnnouncements(predictions);
+      frameCounter = (frameCounter + 1) % FRAME_SKIP;
+      if (frameCounter === 0) {
+        const predictions = await model.detect(video);
+        drawPredictions(predictions);
+        handleAnnouncements(predictions);
+      }
     } catch (e) {
       console.error("Erro de detecção:", e);
     }
@@ -399,7 +494,7 @@ async function startDetectionLoop() {
   detectFrame();
 }
 
-/* ========================= DRAW ========================= */
+/* ========================= DRAW PREDICTIONS ========================= */
 function drawPredictions(predictions) {
   if (!ctx || !canvas) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -442,7 +537,7 @@ window.addEventListener("beforeunload", () => {
   if (rafId) cancelAnimationFrame(rafId);
 });
 
-/* ========================= UNLOCK BANNER (for published site) ========================= */
+/* ========================= UNLOCK BANNER & OCR HOOK ========================= */
 const enableVoiceBanner = document.getElementById('enableVoiceBanner');
 speechSynthesis.onvoiceschanged = () => { console.log('onvoiceschanged -> voices:', speechSynthesis.getVoices().map(v => v.lang + ' :: ' + v.name)); };
 
@@ -477,10 +572,39 @@ if (enableVoiceBanner) {
   enableVoiceBanner.addEventListener('click', async () => { await enableVoiceNow(); }, { once: true, passive: true });
 }
 
-// redundancy: also run warmUp on first click anywhere
-document.addEventListener('click', function _firstClickHandler() {
-  try { if (typeof warmUpVoices === 'function') warmUpVoices().catch(()=>{}); } catch(e){}
-  document.removeEventListener('click', _firstClickHandler, { capture: false });
-}, { capture: false });
+// OCR (optional) — requires tesseract.js in HTML to work
+async function runOCR() {
+  if (!video) { console.warn('OCR: video não pronto'); return; }
+  const tmp = document.createElement('canvas');
+  tmp.width = video.videoWidth; tmp.height = video.videoHeight;
+  const c = tmp.getContext('2d'); c.drawImage(video, 0, 0, tmp.width, tmp.height);
+  const dataURL = tmp.toDataURL('image/png');
+  if (transcricao) transcricao.innerText = 'Lendo texto...';
+  try {
+    const { Tesseract } = window;
+    if (!Tesseract) { console.warn('Tesseract não carregado. Adicione o script CDN no HTML.'); if (transcricao) transcricao.innerText = 'Tesseract.js não disponível.'; return; }
+    const worker = Tesseract.createWorker({ logger: m => console.log('ocr', m) });
+    await worker.load(); await worker.loadLanguage('por+eng'); await worker.initialize('por+eng');
+    const { data: { text } } = await worker.recognize(dataURL);
+    await worker.terminate();
+    console.log('OCR resultado:', text);
+    if (transcricao) transcricao.innerText = `Texto: ${text.slice(0,200)}`;
+    speak(`Texto detectado: ${text.split('\n').slice(0,2).join(' , ')}`);
+  } catch (e) {
+    console.error('OCR erro', e);
+    if (transcricao) transcricao.innerText = 'Erro OCR. Veja console.';
+  }
+}
+document.getElementById('ocrBtn')?.addEventListener('click', () => { runOCR().catch(()=>{}); });
 
-/* ========================= END OF FILE ========================= */
+/* voice presets and contrast toggle (UI hooks) */
+document.getElementById('voicePreset')?.addEventListener('change', (e) => {
+  const v = e.target.value;
+  if (v === 'fast') { speechSettings.rate = 1.3; speechSettings.volume = 0.95; }
+  else if (v === 'slow') { speechSettings.rate = 0.85; speechSettings.volume = 0.9; }
+  else { speechSettings.rate = 1.0; speechSettings.volume = 0.9; }
+});
+
+document.getElementById('toggleContrast')?.addEventListener('click', () => {
+  document.documentElement.classList.toggle('high-contrast');
+});
